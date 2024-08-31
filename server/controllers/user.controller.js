@@ -5,6 +5,8 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import sendVerificationEmail from "../services/nodemailer.js";
 import { JWT_SECRET } from "../config/index.js";
+import { Product } from "../models/product.model.js";
+import { Order } from "../models/order.model.js";
 
 const userController = {
   async register(req, res, next) {
@@ -119,13 +121,83 @@ const userController = {
         return next(createHttpError(400, "Please verify your email first"));
       }
 
-      const token = jwt.sign({ id: user._id }, JWT_SECRET, {
+      const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, {
         expiresIn: "10h",
       });
 
       res.json({ message: "Login successful", token });
     } catch (err) {
       return next(createHttpError(500, err.message));
+    }
+  },
+  async me(req, res, next) {
+    const { email, id } = req.user;
+
+    try {
+      const user = await User.findOne({
+        $or: [{ email: email }, { _id: id }],
+      }).select("-__v -password");
+      if (!user) {
+        return next(customErrorHandler.notFound("No user found!"));
+      }
+      return res.json(user);
+    } catch (error) {
+      return next(error);
+    }
+  },
+  async order(req, res, next) {
+    const { id, email } = req.user;
+    const orderSchema = Joi.object({
+      items: Joi.array()
+        .items(
+          Joi.object({
+            productId: Joi.string().required(),
+            quantity: Joi.number().min(1).required(),
+            purchaseAtPrice: Joi.number().required(),
+          })
+        )
+        .min(1)
+        .required(),
+      shippingAddress: Joi.string().required(),
+    });
+
+    const { error } = orderSchema.validate(req.body);
+    if (error) {
+      return next(createHttpError(400, error.message));
+    }
+    try {
+      const user = await User.findOne({
+        $or: [{ email: email }, { _id: id }],
+      }).select("-__v -password");
+      if (!user) {
+        return next(customErrorHandler.notFound("No user found!"));
+      }
+
+      const { items, shippingAddress } = req.body;
+      // Create the order
+      const newOrder = new Order({
+        userId: req.user.id,
+        items,
+        shippingAddress,
+      });
+      const savedOrder = await newOrder.save();
+
+      res.status(201).json({ message: "Order placed successfully!" });
+    } catch (error) {
+      return next(error);
+    }
+  },
+  async orderHistory(req, res, next) {
+    const { email, id } = req.user;
+
+    try {
+      const orders = await Order.find({ userId: id });
+      if (!orders) {
+        return next(createHttpError(404, "No orders found!"));
+      }
+      res.json(orders);
+    } catch (err) {
+      return next(createHttpError(500, "Internal Server Error"));
     }
   },
 };

@@ -14,9 +14,13 @@ const productSchema = new Schema(
       type: String,
       required: true,
     },
-    Image: {
+    image: {
       type: String,
       default: "https://rb.gy/w3jq7t",
+    },
+    owner: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
     },
   },
   { timestamps: true }
