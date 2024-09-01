@@ -94,9 +94,17 @@ const userController = {
           "string.pattern.base": "Please provide a valid email address.",
           "string.empty": "Email is required.",
         }),
-      password: Joi.string().required().messages({
-        "string.empty": "Password is required.",
-      }),
+      password: Joi.string()
+        .min(8)
+        .regex(/[A-Z]/, "uppercase")
+        .regex(/[a-z]/, "lowercase")
+        .regex(/[!@#$%^&*(),.?":{}|<>]/, "special character")
+        .required()
+        .messages({
+          "string.min": "Password must be at least 8 characters long.",
+          "string.pattern.name": "Password must contain at least one {#name}.",
+          "string.empty": "Password is required.",
+        }),
     });
 
     const { error } = LoginSchema.validate(req.body);
@@ -188,11 +196,14 @@ const userController = {
     }
   },
   async orderHistory(req, res, next) {
-    const { email, id } = req.user;
+    const { id } = req.user;
 
     try {
-      const orders = await Order.find({ userId: id });
-      if (!orders) {
+      const orders = await Order.find({ userId: id }).populate({
+        path: "items.productId",
+        select: "name -_id", // Only populate the 'name' field of the product and exclude the '_id' field
+      });
+      if (!orders.length) {
         return next(createHttpError(404, "No orders found!"));
       }
       res.json(orders);
